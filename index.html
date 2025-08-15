@@ -8,7 +8,9 @@
   <!-- Firebase SDK 読み込み -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
+　<button id="test-write">書き込みテスト（[1,2,3]）</button>
+　<div id="status" style="margin-top:8px; font-size:14px; color:#666;"></div>
+  
   <!-- Firebase 設定（ここにプロジェクト情報を記入） -->
   <script>
     const firebaseConfig = {
@@ -24,6 +26,22 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
   </script>
+  <script>
+  const statusEl = document.getElementById("status");
+
+  document.getElementById("test-write").addEventListener("click", () => {
+    database.ref("drawnNumbers").set([1,2,3])
+      .then(() => { statusEl.textContent = "✅ 書き込み成功（[1,2,3]）"; })
+      .catch(err => { statusEl.textContent = "❌ 書き込み失敗：" + err.message; console.error(err); });
+  });
+
+  // 受信のログ（すでに on('value') をお使いならOK／なければ参考）
+  database.ref("drawnNumbers").on("value", (snap) => {
+    const data = snap.val();
+    console.log("📥 受信:", data);
+  });
+</script>
+
 
   <style>
     body {
@@ -213,3 +231,4 @@
   </script>
 </body>
 </html>
+
