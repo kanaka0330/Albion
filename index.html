@@ -10,50 +10,91 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px;
-           background: linear-gradient(135deg, #fff0f6, #e0f7fa); }
-    h1 { color:#e67cb8; }
-    #bingo-card { display:grid; grid-template-columns:repeat(5,60px); gap:8px;
-                  justify-content:center; margin:20px auto; }
-    .cell { width:60px; height:60px; line-height:60px; background:#fff;
-            border:2px solid #f8a4c3; border-radius:10px; }
-    .marked { background:#fbd0e2; font-weight:bold; color:#e60073; }
-    button { margin:5px; padding:8px 16px; border:none; border-radius:6px;
-             background:#f8a4c3; color:#fff; cursor:pointer; }
-    button:hover { background:#e67cb8; }
-    ul { list-style:none; padding:0; }
-    .detail-card { margin-top:10px; display:grid;
-                   grid-template-columns:repeat(5,30px); gap:3px;
-                   justify-content:center; }
-    .detail-card .cell { width:30px; height:30px; line-height:30px; font-size:12px; }
-    .line-reach { border:2px solid orange; }
-    .line-bingo { border:2px solid red; }
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', sans-serif;
+      background: linear-gradient(135deg, #fff0f6, #e0f7fa);
+      text-align: center;
+      padding: 40px;
+      color: #444;
+    }
+    h1 { font-size: 32px; color: #e67cb8; }
+    #bingo-card, .detail-card {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      gap: 6px;
+      justify-content: center;
+      margin-top: 15px;
+    }
+    .cell {
+      width: 60px; height: 60px;
+      line-height: 60px;
+      background: #fff;
+      border: 2px solid #f8a4c3;
+      border-radius: 10px;
+      font-size: 20px;
+    }
+    .marked {
+      background: #fbd0e2;
+      font-weight: bold;
+      color: #e60073;
+    }
+    button {
+      margin-top: 20px;
+      font-size: 16px;
+      padding: 10px 20px;
+      background: #f8a4c3;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover { background: #e67cb8; }
+    input {
+      padding: 8px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-right: 8px;
+    }
+    #drawn-numbers, #name-area, #participants {
+      margin-top: 30px;
+      font-size: 16px;
+    }
+    #participants ul { list-style: none; padding: 0; margin-top: 10px; }
+    #participants li { margin: 6px 0; cursor: pointer; }
+    #detail-card {
+      margin-top: 15px;
+      padding: 10px;
+      background: #fff8fb;
+      border: 2px dashed #e67cb8;
+      border-radius: 12px;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
   <h1>🎀 あるびおんビンゴ 🎀</h1>
 
-  <!-- 名前入力 -->
-  <div>
-    <input id="player-name" placeholder="お名前を入力" />
+  <!-- 名前入力欄 -->
+  <div id="name-area">
+    <input id="player-name" placeholder="お名前を入力してください" />
     <button onclick="registerPlayer()">参加する</button>
     <button onclick="resetGame()">リセット</button>
   </div>
 
   <!-- 自分のカード -->
-  <h3>🎲 あなたのカード</h3>
   <div id="bingo-card"></div>
-
-  <!-- 番号抽選（主催者用） -->
-  <button onclick="drawNumber()">番号をひく</button>
+  <button onclick="drawNumber()">番号をひく🎲</button>
   <div id="drawn-numbers"></div>
 
   <!-- 参加者一覧 -->
-  <h3>🌸 参加者一覧</h3>
-  <ul id="participant-list"></ul>
+  <div id="participants">
+    <h3>🌸 参加者一覧</h3>
+    <ul id="participant-list"></ul>
+  </div>
 
-  <!-- Firebase 設定 -->
   <script>
+    // --- Firebase 初期化 ---
     const firebaseConfig = {
       apiKey: "AIzaSyDpiUUB8mB1eFBu2YejFVQlKtP1DF9cFKw",
       authDomain: "albion-0623.firebaseapp.com",
@@ -66,128 +107,91 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-  </script>
 
-  <script>
+    // --- 変数 ---
     const size = 5;
-    const cardEl = document.getElementById("bingo-card");
+    let cardNumbers = [];
+    let drawnNumbers = [];
+    let myId = null;
+    let openedDetailId = null; // 現在開いているプレイヤー
+
+    const card = document.getElementById("bingo-card");
     const drawnDiv = document.getElementById("drawn-numbers");
     const nameInput = document.getElementById("player-name");
     const participantList = document.getElementById("participant-list");
 
-    let myId = null;
-    let myCard = null;
-    const drawnNumbers = [];
-
-    // 🎴 カード生成
-    function generateCard(){
-      const used=new Set(), card=[];
-      for(let i=0;i<size*size;i++){
-        let n; do{ n=Math.floor(Math.random()*75)+1; }while(used.has(n));
-        used.add(n); card[i]=n;
+    // --- ビンゴカード生成 ---
+    function generateCard() {
+      const used = new Set();
+      cardNumbers = [];
+      for (let i = 0; i < size * size; i++) {
+        let num;
+        do { num = Math.floor(Math.random() * 75) + 1; }
+        while (used.has(num));
+        used.add(num);
+        cardNumbers[i] = num;
       }
-      card[Math.floor(size*size/2)]="FREE";
-      return card;
+      cardNumbers[Math.floor(size * size / 2)] = "FREE";
+    }
+    function displayCard() {
+      card.innerHTML = "";
+      cardNumbers.forEach(n => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.textContent = n;
+        if (n === "FREE") cell.classList.add("marked");
+        card.appendChild(cell);
+      });
     }
 
-    // 🎴 カード表示（塗りつぶし反映済み）
-    function displayCard(card){
-      cardEl.innerHTML="";
-      card.forEach(n=>{
-        const c=document.createElement("div");
-        c.className="cell";
-        c.textContent=n;
-        if(n==="FREE"||drawnNumbers.includes(n)){
+    // --- 番号をひく ---
+    function drawNumber() {
+      if (drawnNumbers.length >= 75) return;
+      let num;
+      do { num = Math.floor(Math.random() * 75) + 1; }
+      while (drawnNumbers.includes(num));
+      drawnNumbers.push(num);
+      db.ref("drawnNumbers").set(drawnNumbers);
+    }
+
+    // --- 番号の反映 ---
+    function updateDrawnNumbers() {
+      drawnDiv.innerHTML = `<strong>出た番号：</strong> ${drawnNumbers.join("・")}`;
+      document.querySelectorAll("#bingo-card .cell").forEach(c => {
+        if (drawnNumbers.includes(parseInt(c.textContent))) {
           c.classList.add("marked");
         }
-        cardEl.appendChild(c);
       });
     }
 
-    // 🎲 番号抽選
-    function drawNumber(){
-      db.ref("drawnNumbers").once("value").then(snap=>{
-        const arr=snap.val()||[];
-        if(arr.length>=75) return;
-        let n; do{ n=Math.floor(Math.random()*75)+1; }while(arr.includes(n));
-        arr.push(n);
-        db.ref("drawnNumbers").set(arr);
-      });
-    }
-
-    // 🔄 出た番号を反映
-    db.ref("drawnNumbers").on("value",snap=>{
-      const data=snap.val()||[];
-      drawnNumbers.length=0; drawnNumbers.push(...data);
-      drawnDiv.innerHTML="<strong>出た番号：</strong>"+data.join("・");
-      if(myCard) displayCard(myCard); // ← 修正ポイント
-      if(myId) updateMyStatus();
-    });
-
-    // ✅ リーチ/ビンゴ判定
-    function getStatus(card){
-      let lines=0, reach=false;
-      const lineCheck=[];
-      for(let i=0;i<size;i++){
-        lineCheck.push(card.slice(i*size,(i+1)*size)); //横
-        lineCheck.push(card.filter((_,idx)=>idx%size===i)); //縦
+    // --- 参加登録 ---
+    function registerPlayer() {
+      const name = nameInput.value.trim();
+      if (!name) return alert("名前を入力してください！");
+      if (!myId) {
+        myId = db.ref("participants").push().key;
       }
-      lineCheck.push(card.filter((_,idx)=>idx%6===0)); //斜め \
-      lineCheck.push(card.filter((_,idx)=>idx%4===0&&idx>0&&idx<size*size-1)); //斜め /
-
-      lineCheck.forEach(line=>{
-        const marks=line.filter(n=>n==="FREE"||drawnNumbers.includes(n)).length;
-        if(marks===size) lines++;
-        if(marks===size-1) reach=true;
+      db.ref("participants/" + myId).set({
+        name,
+        status: "参加中",
+        card: cardNumbers
       });
-
-      if(lines>0) return "ビンゴ";
-      if(reach) return "リーチ";
-      return "参加中";
+      nameInput.value = "";
     }
 
-    // 🔄 自分のステータスを更新
-    function updateMyStatus(){
-      if(!myId||!myCard) return;
-      const status=getStatus(myCard);
-      db.ref("participants/"+myId).update({status});
-    }
+    // --- 参加者表示 + 詳細モード ---
+    function showDetailCard(player, id){
+      const existing = document.getElementById("detail-card");
+      if(openedDetailId === id){
+        if(existing) existing.remove();
+        openedDetailId = null;
+        return;
+      }
+      if(existing) existing.remove();
 
-    // 🙋 プレイヤー登録
-    function registerPlayer(){
-      const name=nameInput.value.trim();
-      if(!name) return alert("名前を入力してください！");
-      myId=db.ref("participants").push().key;
-      myCard=generateCard();
-      db.ref("participants/"+myId).set({
-        name, status:"参加中", card:myCard
-      });
-      displayCard(myCard);
-      nameInput.value="";
-    }
-
-    // 🌸 参加者一覧リアルタイム表示
-    db.ref("participants").on("value",snap=>{
-      const data=snap.val()||{};
-      participantList.innerHTML="";
-      Object.entries(data).forEach(([id,p])=>{
-        const li=document.createElement("li");
-        li.innerHTML=`<strong>${p.name}</strong> - ${p.status}`;
-        participantList.appendChild(li);
-
-        // 🔍 名前クリックで詳細モード
-        li.style.cursor="pointer";
-        li.onclick=()=>{
-          showDetailCard(p);
-        };
-      });
-    });
-
-    // 👀 詳細モード表示
-    function showDetailCard(player){
       const detail=document.createElement("div");
+      detail.id="detail-card";
       detail.className="detail-card";
-      detail.innerHTML="";
       player.card.forEach(n=>{
         const c=document.createElement("div");
         c.className="cell";
@@ -196,15 +200,40 @@
         detail.appendChild(c);
       });
       participantList.appendChild(detail);
+      openedDetailId = id;
     }
 
-    // 🔄 リセット
-    function resetGame(){
-      if(confirm("ゲームをリセットしますか？")){
-        db.ref("drawnNumbers").set([]);
-        db.ref("participants").set({});
+    db.ref("participants").on("value", snap=>{
+      const data=snap.val()||{};
+      participantList.innerHTML="";
+      Object.entries(data).forEach(([id,p])=>{
+        const li=document.createElement("li");
+        li.innerHTML=`<strong>${p.name}</strong> - ${p.status}`;
+        li.onclick=()=>showDetailCard(p,id);
+        participantList.appendChild(li);
+      });
+    });
+
+    // --- 番号を同期 ---
+    db.ref("drawnNumbers").on("value", snap=>{
+      const data=snap.val();
+      if(data){
+        drawnNumbers = data;
+        updateDrawnNumbers();
       }
+    });
+
+    // --- リセット ---
+    function resetGame(){
+      db.ref("drawnNumbers").set([]);
+      db.ref("participants").set({});
+      drawnNumbers = [];
+      updateDrawnNumbers();
     }
+
+    // --- 初期化 ---
+    generateCard();
+    displayCard();
   </script>
 </body>
 </html>
