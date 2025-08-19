@@ -20,7 +20,7 @@
     h1 { font-size: 32px; color: #e67cb8; margin-bottom: 8px; }
     .controls { margin: 8px 0 16px; }
 
-    /* カード（自分・詳細）を5x5のグリッドで統一 */
+    /* 5×5グリッド（自分/詳細で統一） */
     #bingo-card, .detail-card {
       display: grid;
       grid-template-columns: repeat(5, 56px);
@@ -28,7 +28,6 @@
       justify-content: center;
       margin-top: 12px;
     }
-
     .cell {
       width: 56px; height: 56px;
       line-height: 56px;
@@ -68,14 +67,14 @@
     #participants ul { list-style: none; padding: 0; margin-top: 10px; }
     #participants li { margin: 6px 0; cursor: pointer; }
 
-    /* 詳細カード：5x5で固定＋中央寄せ */
+    /* 詳細カード：5×5固定＋中央寄せ */
     #detail-card {
       margin-top: 12px;
       padding: 10px;
       background: #fff8fb;
       border: 2px dashed #e67cb8;
       border-radius: 12px;
-      display: grid;                       /* ← 重要：gridで固定 */
+      display: grid;
       grid-template-columns: repeat(5, 56px);
       gap: 6px;
       width: fit-content;
@@ -133,8 +132,8 @@
       projectId: "albion-0623",
       storageBucket: "albion-0623.appspot.com",
       messagingSenderId: "198257160394",
-      appId: "1:198257160394:web:55c0a9b8f6e45ba0584433",
-      measurementId: "G-J8HXQQEN5G"
+      appId: "1:198257160394:web:7338d0a854e6f857584433",
+      measurementId: "G-SRZ2TFNREX"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
@@ -144,7 +143,7 @@
     let cardNumbers = [];
     let drawnNumbers = [];
     let myId = null;
-    let openedDetailId = null; // 現在開いているプレイヤー
+    let openedDetailId = null;
 
     const card = document.getElementById("bingo-card");
     const lastNumberEl = document.getElementById("last-number");
@@ -153,20 +152,18 @@
     const participantList = document.getElementById("participant-list");
     const hostMode = document.getElementById("host-mode");
 
-    // ============ Discord 連携（任意・安全のため空にしてあります） ============
+    // ============ Discord 連携（任意） ============
     const DISCORD_WEBHOOK_URL = ""; // 直貼りテスト用（推奨しません）
-    const DISCORD_PROXY_URL = "";   // Cloud Functions等の中継先を推奨
+    const DISCORD_PROXY_URL = "";   // 中継関数推奨
     async function postDiscordDirect(payload) {
       if (!DISCORD_WEBHOOK_URL) return;
-      try {
-        await fetch(DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      } catch (e) { console.warn("Discord送信に失敗:", e); }
+      try { await fetch(DISCORD_WEBHOOK_URL, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) }); }
+      catch(e){ console.warn("Discord送信に失敗:", e); }
     }
     async function postDiscordProxy(payload) {
       if (!DISCORD_PROXY_URL) return;
-      try {
-        await fetch(DISCORD_PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      } catch (e) { console.warn("Discord送信に失敗:", e); }
+      try { await fetch(DISCORD_PROXY_URL, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) }); }
+      catch(e){ console.warn("Discord送信に失敗:", e); }
     }
     async function notifyDiscord(type, data) {
       const content =
@@ -200,7 +197,7 @@
         if (n === "FREE") cell.classList.add("marked");
         card.appendChild(cell);
       });
-      markCardWithDrawn(); // 既出番号の反映
+      markCardWithDrawn();
     }
 
     // ============ 抽選（主催者のみ） ============
@@ -233,7 +230,7 @@
       });
     }
 
-    // ============ ステータス計算（数値/文字列の差異を吸収） ============
+    // ============ 判定（数値/文字列差異を吸収） ============
     function isMarkedValue(val, drawn) {
       if (val === "FREE") return true;
       const n = Number(val);
@@ -244,16 +241,12 @@
     }
     function computeStatus(cardVals, drawn) {
       const lines = [];
-      // rows
       for (let r = 0; r < 5; r++) lines.push(cardVals.slice(r * 5, r * 5 + 5));
-      // cols
       for (let c = 0; c < 5; c++) lines.push([0,1,2,3,4].map(r => cardVals[r * 5 + c]));
-      // diagonals
       lines.push([0,6,12,18,24].map(i => cardVals[i]));
       lines.push([4,8,12,16,20].map(i => cardVals[i]));
 
-      let hasBingo = false;
-      let hasReach = false;
+      let hasBingo = false, hasReach = false;
       for (const L of lines) {
         const m = countLineMarks(L, drawn);
         if (m === 5) hasBingo = true;
@@ -267,15 +260,11 @@
       const name = nameInput.value.trim();
       if (!name) return alert("名前を入力してください！");
       if (!myId) myId = db.ref("participants").push().key;
-      db.ref("participants/" + myId).set({
-        name,
-        status: "参加中",
-        card: cardNumbers
-      });
+      db.ref("participants/" + myId).set({ name, status: "参加中", card: cardNumbers });
       nameInput.value = "";
     }
 
-    // ============ 詳細モード：同時に1枚、トグルで閉じる ============
+    // ============ 詳細モード（同時1枚・トグル） ============
     function showDetailCard(player, id){
       const existing = document.getElementById("detail-card");
       if (openedDetailId === id) {
@@ -299,9 +288,9 @@
       openedDetailId = id;
     }
 
-    // ============ ビンゴ順位採番・ログ ============
+    // ============ ビンゴ順位（rankCounter で採番）＆ログ ============
     async function assignBingoRank() {
-      const ref = db.ref("bingoLogs/count");
+      const ref = db.ref("rankCounter");            // ★ rankCounter に統一
       const newRank = await ref.transaction(val => (val || 0) + 1)
         .then(result => result.snapshot.val())
         .catch(() => null);
@@ -319,12 +308,12 @@
       } else if (newStatus === "ビンゴ") {
         const rank = await assignBingoRank();
         const log = { name: p.name, lastNumber, rank: rank || null, ts: Date.now() };
-        await db.ref("bingoLogs/items").push(log);
+        await db.ref("bingoLogs/items").push(log); // ログは従来どおり
         notifyDiscord("bingo", { name: p.name, lastNumber, rank });
       }
     }
 
-    // ============ 参加者リスト監視 ============
+    // ============ 参加者監視 ============
     db.ref("participants").on("value", snap=>{
       const data = snap.val() || {};
       participantList.innerHTML = "";
@@ -356,10 +345,11 @@
 
     // ============ リセット ============
     function resetGame(){
-      if (!confirm("ゲームをリセットしますか？（抽選履歴・参加者情報・順位ログを削除）")) return;
+      if (!confirm("ゲームをリセットしますか？（抽選履歴・参加者情報・順位ログ・rankCounterを初期化）")) return;
       db.ref("drawnNumbers").set([]);
       db.ref("participants").set({});
       db.ref("bingoLogs").set({});
+      db.ref("rankCounter").set(0);                 // ★ 追加：採番もリセット
       drawnNumbers = [];
       updateDrawnNumbersUI();
       const existing = document.getElementById("detail-card");
