@@ -19,6 +19,8 @@
     }
     h1 { font-size: 32px; color: #e67cb8; margin-bottom: 8px; }
     .controls { margin: 8px 0 16px; }
+
+    /* カード（自分・詳細）を5x5のグリッドで統一 */
     #bingo-card, .detail-card {
       display: grid;
       grid-template-columns: repeat(5, 56px);
@@ -26,6 +28,7 @@
       justify-content: center;
       margin-top: 12px;
     }
+
     .cell {
       width: 56px; height: 56px;
       line-height: 56px;
@@ -64,14 +67,22 @@
     }
     #participants ul { list-style: none; padding: 0; margin-top: 10px; }
     #participants li { margin: 6px 0; cursor: pointer; }
+
+    /* 詳細カード：5x5で固定＋中央寄せ */
     #detail-card {
       margin-top: 12px;
       padding: 10px;
       background: #fff8fb;
       border: 2px dashed #e67cb8;
       border-radius: 12px;
-      display: inline-block;
+      display: grid;                       /* ← 重要：gridで固定 */
+      grid-template-columns: repeat(5, 56px);
+      gap: 6px;
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
     }
+
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; margin-left:6px; }
     .badge.wait { background:#eee; }
     .badge.reach { background:#ffe082; }
@@ -142,29 +153,19 @@
     const participantList = document.getElementById("participant-list");
     const hostMode = document.getElementById("host-mode");
 
-    // ============ Discord 連携（任意） ============
-    // 【直POST版】（推奨しません・テスト用）
-    const DISCORD_WEBHOOK_URL = ""; // ← 直貼りしたい場合のみ入れる
+    // ============ Discord 連携（任意・安全のため空にしてあります） ============
+    const DISCORD_WEBHOOK_URL = ""; // 直貼りテスト用（推奨しません）
+    const DISCORD_PROXY_URL = "";   // Cloud Functions等の中継先を推奨
     async function postDiscordDirect(payload) {
       if (!DISCORD_WEBHOOK_URL) return;
       try {
-        await fetch(DISCORD_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        await fetch(DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       } catch (e) { console.warn("Discord送信に失敗:", e); }
     }
-    // 【推奨】中継エンドポイント版（例：Cloud Functions / Netlify Functions）
-    const DISCORD_PROXY_URL = ""; // 例）https://your-func.example.com/discord
     async function postDiscordProxy(payload) {
       if (!DISCORD_PROXY_URL) return;
       try {
-        await fetch(DISCORD_PROXY_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        await fetch(DISCORD_PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       } catch (e) { console.warn("Discord送信に失敗:", e); }
     }
     async function notifyDiscord(type, data) {
@@ -173,7 +174,6 @@
           ? `🎯 **${data.name}** さんが **リーチ**！（番号: ${data.lastNumber}）`
           : `🎉 **${data.name}** さんが **BINGO!**（番号: ${data.lastNumber} / **${data.rank}位**）`;
       const payload = { content };
-      // どちらか用意できている方で送る
       await postDiscordProxy(payload);
       await postDiscordDirect(payload);
     }
@@ -200,11 +200,10 @@
         if (n === "FREE") cell.classList.add("marked");
         card.appendChild(cell);
       });
-      // 既に出ている番号があれば反映
-      markCardWithDrawn();
+      markCardWithDrawn(); // 既出番号の反映
     }
 
-    // ============ 番号をひく（主催者のみ） ============
+    // ============ 抽選（主催者のみ） ============
     function drawNumber() {
       if (!hostMode.checked) return alert("主催者モードがONの人のみ抽選できます。");
       if (drawnNumbers.length >= 75) return;
@@ -225,7 +224,7 @@
     function markCardWithDrawn() {
       document.querySelectorAll("#bingo-card .cell").forEach(c => {
         const val = c.textContent;
-        const n = val === "FREE" ? "FREE" : parseInt(val);
+        const n = val === "FREE" ? "FREE" : Number(val);
         if (n === "FREE" || drawnNumbers.includes(n)) {
           c.classList.add("marked");
         } else {
@@ -234,25 +233,21 @@
       });
     }
 
-    // ============ ステータス計算 ============
+    // ============ ステータス計算（数値/文字列の差異を吸収） ============
     function isMarkedValue(val, drawn) {
-      return val === "FREE" || drawn.includes(val);
+      if (val === "FREE") return true;
+      const n = Number(val);
+      return drawn.includes(n);
     }
     function countLineMarks(lineValues, drawn) {
       return lineValues.reduce((acc, v) => acc + (isMarkedValue(v, drawn) ? 1 : 0), 0);
     }
     function computeStatus(cardVals, drawn) {
-      // 5x5行・列・斜めを評価
       const lines = [];
-
       // rows
-      for (let r = 0; r < 5; r++) {
-        lines.push(cardVals.slice(r * 5, r * 5 + 5));
-      }
+      for (let r = 0; r < 5; r++) lines.push(cardVals.slice(r * 5, r * 5 + 5));
       // cols
-      for (let c = 0; c < 5; c++) {
-        lines.push([0,1,2,3,4].map(r => cardVals[r * 5 + c]));
-      }
+      for (let c = 0; c < 5; c++) lines.push([0,1,2,3,4].map(r => cardVals[r * 5 + c]));
       // diagonals
       lines.push([0,6,12,18,24].map(i => cardVals[i]));
       lines.push([4,8,12,16,20].map(i => cardVals[i]));
@@ -271,9 +266,7 @@
     function registerPlayer() {
       const name = nameInput.value.trim();
       if (!name) return alert("名前を入力してください！");
-      if (!myId) {
-        myId = db.ref("participants").push().key;
-      }
+      if (!myId) myId = db.ref("participants").push().key;
       db.ref("participants/" + myId).set({
         name,
         status: "参加中",
@@ -282,7 +275,7 @@
       nameInput.value = "";
     }
 
-    // ============ 参加者表示 + 詳細モード（一枚だけ） ============
+    // ============ 詳細モード：同時に1枚、トグルで閉じる ============
     function showDetailCard(player, id){
       const existing = document.getElementById("detail-card");
       if (openedDetailId === id) {
@@ -299,15 +292,14 @@
         const c=document.createElement("div");
         c.className="cell";
         c.textContent=n;
-        if (n==="FREE" || drawnNumbers.includes(n)) c.classList.add("marked");
+        if (n==="FREE" || drawnNumbers.includes(Number(n))) c.classList.add("marked");
         detail.appendChild(c);
       });
       participantList.appendChild(detail);
       openedDetailId = id;
     }
 
-    // ============ ステータス更新・ログ記録 ============
-    // ビンゴ順位採番：bingoLogs の件数 + 1 を返す（トランザクション）
+    // ============ ビンゴ順位採番・ログ ============
     async function assignBingoRank() {
       const ref = db.ref("bingoLogs/count");
       const newRank = await ref.transaction(val => (val || 0) + 1)
@@ -315,57 +307,45 @@
         .catch(() => null);
       return newRank;
     }
-
     async function onParticipantMaybeUpdateStatus(id, p, drawn) {
       const lastNumber = drawn[drawn.length - 1] || null;
       const newStatus = computeStatus(p.card, drawn);
-      if (newStatus === p.status) return; // 変化なし
+      if (newStatus === p.status) return;
 
       await db.ref(`participants/${id}/status`).set(newStatus);
 
       if (newStatus === "リーチ") {
-        // Discord通知（任意）
         notifyDiscord("reach", { name: p.name, lastNumber });
       } else if (newStatus === "ビンゴ") {
         const rank = await assignBingoRank();
-        const log = {
-          name: p.name,
-          lastNumber,
-          rank: rank || null,
-          ts: Date.now()
-        };
+        const log = { name: p.name, lastNumber, rank: rank || null, ts: Date.now() };
         await db.ref("bingoLogs/items").push(log);
-        // Discord通知（任意）
         notifyDiscord("bingo", { name: p.name, lastNumber, rank });
       }
     }
 
-    // ============ 参加者監視 ============
+    // ============ 参加者リスト監視 ============
     db.ref("participants").on("value", snap=>{
       const data = snap.val() || {};
       participantList.innerHTML = "";
       Object.entries(data).forEach(([id, p])=>{
         const li = document.createElement("li");
         const badgeClass = p.status === "ビンゴ" ? "bingo" : (p.status === "リーチ" ? "reach" : "wait");
-        li.innerHTML = `<strong>${p.name}</strong>
-          <span class="badge ${badgeClass}">${p.status}</span>`;
+        li.innerHTML = `<strong>${p.name}</strong><span class="badge ${badgeClass}">${p.status}</span>`;
         li.onclick = ()=>showDetailCard(p, id);
         participantList.appendChild(li);
 
-        // 抽選が進んだ後にステータス再評価
-        if (drawnNumbers.length && p.card) {
-          onParticipantMaybeUpdateStatus(id, p, drawnNumbers);
-        }
+        if (drawnNumbers.length && p.card) onParticipantMaybeUpdateStatus(id, p, drawnNumbers);
       });
     });
 
-    // ============ 番号同期 ============
+    // ============ 抽選番号の同期 ============
     db.ref("drawnNumbers").on("value", snap=>{
       const data = snap.val() || [];
       drawnNumbers = data;
       updateDrawnNumbersUI();
 
-      // 抽選が更新されたら全員再評価
+      // 抽選更新ごとに全員再評価
       db.ref("participants").once("value").then(s=>{
         const participants = s.val() || {};
         Object.entries(participants).forEach(([id, p])=>{
@@ -388,11 +368,10 @@
     }
 
     // ============ 初期化 ============
-    function init() {
+    (function init() {
       generateCard();
       displayCard();
-    }
-    init();
+    })();
   </script>
 </body>
 </html>
