@@ -9,8 +9,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
-  <!-- Firebase 設定 -->
   <script>
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDpiUUB8mB1eFBu2YejFVQlKtP1DF9cFKw",
       authDomain: "albion-0623.firebaseapp.com",
@@ -101,6 +101,7 @@
   <!-- ビンゴカード表示エリア -->
   <div id="bingo-card"></div>
   <button onclick="drawNumber()">番号をひく🎲</button>
+  <button onclick="resetGame()">🔄 リセット</button>
   <div id="drawn-numbers"></div>
 
   <!-- 参加者一覧エリア -->
@@ -111,17 +112,17 @@
 
   <script>
     const size = 5;
-    let cardNumbers = [];   // 自分のカード
+    const cardNumbers = [];
     const drawnNumbers = [];
+    const participants = [];
 
     const card = document.getElementById("bingo-card");
     const drawnDiv = document.getElementById("drawn-numbers");
     const nameInput = document.getElementById("player-name");
     const participantList = document.getElementById("participant-list");
 
-    // 🔹 ビンゴカードを生成
+    // ビンゴカード作成
     function generateCard() {
-      const nums = [];
       const used = new Set();
       for (let i = 0; i < size * size; i++) {
         let num;
@@ -129,16 +130,15 @@
           num = Math.floor(Math.random() * 75) + 1;
         } while (used.has(num));
         used.add(num);
-        nums[i] = num;
+        cardNumbers[i] = num;
       }
-      nums[Math.floor(size * size / 2)] = "FREE";
-      return nums;
+      cardNumbers[Math.floor(size * size / 2)] = "FREE";
     }
 
-    // 🔹 ビンゴカードを表示
-    function displayCard(numbers) {
+    // ビンゴカード表示
+    function displayCard() {
       card.innerHTML = "";
-      numbers.forEach(n => {
+      cardNumbers.forEach(n => {
         const cell = document.createElement("div");
         cell.className = "cell";
         cell.textContent = n;
@@ -147,48 +147,7 @@
       });
     }
 
-    // 🔹 プレイヤーを登録
-    function registerPlayer() {
-      const name = nameInput.value.trim();
-      if (!name) return alert("名前を入力してください！");
-
-      const ref = database.ref("participants/" + name);
-
-      ref.once("value").then((snap) => {
-        if (snap.exists()) {
-          // 既存カードがある → それを利用
-          const data = snap.val();
-          cardNumbers = data.card;
-          displayCard(cardNumbers);
-          alert(`${name} さんは既存カードを読み込みました！`);
-        } else {
-          // 新規参加 → カード生成して保存
-          cardNumbers = generateCard();
-          ref.set({
-            card: cardNumbers,
-            status: "参加中"
-          });
-          displayCard(cardNumbers);
-          alert(`${name} さんのカードを新規作成しました！`);
-        }
-      });
-
-      nameInput.value = "";
-    }
-
-    // 🔹 参加者リストを同期表示
-    database.ref("participants").on("value", (snap) => {
-      participantList.innerHTML = "";
-      const data = snap.val();
-      if (!data) return;
-      Object.keys(data).forEach(name => {
-        const li = document.createElement("li");
-        li.textContent = `${name}（${data[name].status}）`;
-        participantList.appendChild(li);
-      });
-    });
-
-    // 🔹 番号をひく（主催者用）
+    // 番号をひく
     function drawNumber() {
       if (drawnNumbers.length >= 75) return;
       let num;
@@ -200,11 +159,11 @@
       highlightNumber(num);
       updateDrawnNumbers();
 
-      // Firebaseに保存（順番保持）
+      // Firebaseに保存
       database.ref("drawnNumbers").set(drawnNumbers);
     }
 
-    // 🔹 番号を強調表示
+    // 番号強調
     function highlightNumber(n) {
       document.querySelectorAll(".cell").forEach(c => {
         if (parseInt(c.textContent) === n) {
@@ -213,12 +172,36 @@
       });
     }
 
-    // 🔹 番号の表示更新
+    // 番号表示更新
     function updateDrawnNumbers() {
       drawnDiv.innerHTML = `<strong>出た番号：</strong> ${drawnNumbers.join("・")}`;
     }
 
-    // 🔹 Firebaseから抽選結果を反映
+    // プレイヤー登録
+    function registerPlayer() {
+      const name = nameInput.value.trim();
+      if (!name) return alert("名前を入力してください！");
+      if (participants.includes(name)) return alert("すでに登録されています！");
+      participants.push(name);
+      updateParticipants();
+
+      // Firebaseに保存
+      database.ref("participants").set(participants);
+
+      nameInput.value = "";
+    }
+
+    // 参加者表示更新
+    function updateParticipants() {
+      participantList.innerHTML = "";
+      participants.forEach(name => {
+        const li = document.createElement("li");
+        li.textContent = `${name}（参加中）`;
+        participantList.appendChild(li);
+      });
+    }
+
+    // Firebaseから抽選結果取得
     database.ref("drawnNumbers").on("value", (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -228,6 +211,38 @@
         data.forEach(n => highlightNumber(n));
       }
     });
+
+    // Firebaseから参加者取得
+    database.ref("participants").on("value", (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        participants.length = 0;
+        participants.push(...data);
+        updateParticipants();
+      }
+    });
+
+    // リセット処理
+    function resetGame() {
+      database.ref("drawnNumbers").set([]);
+      database.ref("participants").set([]);
+      drawnNumbers.length = 0;
+      participants.length = 0;
+      updateDrawnNumbers();
+      updateParticipants();
+
+      // 自分のカードのマークをリセット
+      document.querySelectorAll(".cell").forEach(c => {
+        c.classList.remove("marked");
+        if (c.textContent === "FREE") c.classList.add("marked");
+      });
+
+      alert("🔄 ビンゴをリセットしました！");
+    }
+
+    // 初期化
+    generateCard();
+    displayCard();
   </script>
 </body>
 </html>
