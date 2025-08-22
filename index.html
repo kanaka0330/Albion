@@ -116,8 +116,9 @@
     }
     .slot{
       font-size:56px; font-weight:800; letter-spacing:.06em; min-width:200px;
-      animation:spin 1.8s ease-out;
     }
+    /* ← アニメはクラス付けで毎回発火 */
+    .spinNow { animation: spin 1.8s ease-out; }
     @keyframes spin{
       0%{ transform:rotateX(0deg) }
       85%{ transform:rotateX(720deg) }
@@ -201,14 +202,21 @@
 
     /************** Web Audio（効果音を合成） **************/
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function beep({freq=880, dur=0.15, type="sine", gain=0.06}={}){
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = type; o.frequency.value = freq;
-      g.gain.value = gain;
-      o.connect(g); g.connect(audioCtx.destination);
-      o.start();
-      setTimeout(()=>{ o.stop(); }, dur*1000);
+    async function ensureAudioReady() {
+      try {
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+      } catch (_) { /* 音は無音でも演出は続行 */ }
+    }
+    function beep({freq=880, dur=0.15, type="sine", gain=0.06}={}) {
+      try {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.value = gain;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start();
+        setTimeout(()=>{ o.stop(); }, dur*1000);
+      } catch (_) { /* 無音OK */ }
     }
     function reachSound(){
       beep({freq:1200,dur:.08,type:"triangle"});
@@ -247,20 +255,30 @@
       markCardWithDrawn(); // 既出番号反映＆ライン強調
     }
 
+    /************** ガチャ：アニメ確実発火 **************/
+    function triggerSpin(el){
+      el.classList.remove("spinNow","slot-pop");
+      // reflow
+      // eslint-disable-next-line no-unused-expressions
+      el.offsetHeight;
+      el.classList.add("spinNow");
+    }
+
     /************** 番号抽選（ガチャ演出込み） **************/
-    function drawNumber(){
+    async function drawNumber(){
+      await ensureAudioReady(); // 初回でも音が鳴るように
       if(!hostMode.checked) return alert("主催者モードがONの人のみ抽選できます。");
       if(drawnNumbers.length>=75) return;
 
       let num;
       do{ num = Math.floor(Math.random()*75)+1; } while(drawnNumbers.includes(num));
 
-      // 先にDBへ書いてリアルタイム同期
+      // 先にガチャ演出（音が失敗しても演出は出す）
+      showGacha(num);
+
+      // 直後にDBへ反映（UIはリスナーで追従）
       const next = [...drawnNumbers, num];
       db.ref("drawnNumbers").set(next);
-
-      // ガチャ演出
-      showGacha(num);
     }
 
     /************** UI反映＋ライン強調 **************/
@@ -273,7 +291,7 @@
 
     function markCardWithDrawn(){
       const cells = [...cardEl.querySelectorAll(".cell")];
-      // まず全ての状態をクリア
+      // クリア
       cells.forEach(c=>c.classList.remove("marked","win","near"));
 
       // マーク
@@ -294,7 +312,7 @@
       // rows
       for(let r=0;r<5;r++) lines.push([0,1,2,3,4].map(c=>r*5+c));
       // cols
-      for(let c=0;c<5;c++) lines.push([0,1,2,3,4].map(r=>r*5+c));
+      for(let c=0;c<5;c++) lines.push([0,1,2,3,4].map(r=>cardVals[r*5+c]));
       // diagonals
       lines.push([0,6,12,18,24], [4,8,12,16,20]);
 
@@ -399,7 +417,7 @@
       await db.ref(`participants/${id}/status`).set(newStatus);
 
       if(newStatus==="リーチ"){
-        if(id===myId){ showReach(); } // 自分だけ派手に
+        if(id===myId){ showReach(); } // 自分の時だけ派手に
         notifyDiscord("reach",{name:p.name,lastNumber});
       }else if(newStatus==="ビンゴ"){
         const rank = await assignBingoRank();
@@ -437,7 +455,7 @@
       });
     });
 
-    /************** Discord 通知（任意・ダミー） **************/
+    /************** Discord 通知（任意） **************/
     const DISCORD_WEBHOOK_URL = ""; // 直貼りは非推奨
     const DISCORD_PROXY_URL = "";   // 中継関数推奨
     async function postDiscordDirect(payload){ if(!DISCORD_WEBHOOK_URL) return; try{ await fetch(DISCORD_WEBHOOK_URL,{method:"POST",headers:{ "Content-Type":"application/json"},body:JSON.stringify(payload)});}catch(e){ console.warn("Discord送信失敗",e); } }
@@ -467,35 +485,33 @@
 
     /************** 演出：オーバーレイ／ガチャ **************/
     function showReach(){
-      reachSound();
+      ensureAudioReady().then(()=>reachSound()).catch(()=>{});
       const o = document.getElementById("overlay");
       const c = document.getElementById("overlay-content");
       c.innerHTML = `<div class="glowText">🎯 リーチ！</div>`;
       o.classList.remove("hidden");
-      // 軽いパーティクル
       spawnBursts(8);
       setTimeout(()=>o.classList.add("hidden"), 1600);
     }
     function showBingo(rank){
-      bingoSound();
+      ensureAudioReady().then(()=>bingoSound()).catch(()=>{});
       const o = document.getElementById("overlay");
       const c = document.getElementById("overlay-content");
       c.innerHTML = `<div class="glowText">🎉 BINGO!! ${rank?`<br><small>${rank}位！</small>`:""}</div>`;
       o.classList.remove("hidden");
-      // 紙吹雪＆花火
       dropConfetti(80);
       spawnBursts(16);
       setTimeout(()=>o.classList.add("hidden"), 3200);
     }
     function showGacha(number){
-      gachaSound();
+      ensureAudioReady().then(()=>gachaSound()).catch(()=>{});
       const g = document.getElementById("gacha");
       const s = document.getElementById("slot");
-      g.classList.remove("hidden"); s.classList.remove("slot-pop"); s.textContent="??";
-      s.style.animation="none"; s.offsetHeight; // reflow
-      s.style.animation=null; // spin 再適用
+      g.classList.remove("hidden");
+      s.textContent = "??";
+      triggerSpin(s);                 // ← 確実に回す
       setTimeout(()=>{ s.textContent = number; s.classList.add("slot-pop"); }, 1800);
-      setTimeout(()=>g.classList.add("hidden"), 3600);
+      setTimeout(()=> g.classList.add("hidden"), 3600);
     }
     function dropConfetti(n=60){
       const colors=["#ff6b6b","#ffd93d","#6bcB77","#4d96ff","#b26bff","#ff8fab"];
