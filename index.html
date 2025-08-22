@@ -10,30 +10,121 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
   <style>
-    body { font-family:'Hiragino Kaku Gothic ProN',sans-serif; background:linear-gradient(135deg,#fff0f6,#e0f7fa); text-align:center; padding:32px 16px 56px; color:#444; }
-    h1 { font-size:32px; color:#e67cb8; margin-bottom:8px; }
+    :root{
+      --colB:#ffd7e5; /* B列 */
+      --colI:#ffefd7; /* I列 */
+      --colN:#e7ffd7; /* N列 */
+      --colG:#d7f3ff; /* G列 */
+      --colO:#ead7ff; /* O列 */
+      --pink:#f8a4c3;
+      --pink-2:#e67cb8;
+      --marked-bg:#fbd0e2;
+    }
+    body {
+      font-family:'Hiragino Kaku Gothic ProN',sans-serif;
+      background:linear-gradient(135deg,#fff0f6,#e0f7fa);
+      text-align:center; padding:32px 16px 56px; color:#444;
+    }
+    h1 { font-size:32px; color:var(--pink-2); margin-bottom:8px; }
     .controls { margin:8px 0 16px; }
 
     /* 5×5グリッド（自分/詳細で統一） */
-    #bingo-card, .detail-card { display:grid; grid-template-columns:repeat(5,56px); gap:6px; justify-content:center; margin-top:12px; }
-    .cell { width:56px; height:56px; line-height:56px; background:#fff; border:2px solid #f8a4c3; border-radius:10px; font-size:18px; user-select:none; }
-    .marked { background:#fbd0e2; font-weight:bold; color:#e60073; }
-    button { margin-top:14px; font-size:16px; padding:10px 18px; background:#f8a4c3; border:none; border-radius:8px; color:#fff; cursor:pointer; }
-    button:hover { background:#e67cb8; }
+    #bingo-card, .detail-card {
+      --size:56px;
+      display:grid; grid-template-columns:repeat(5,var(--size));
+      gap:6px; justify-content:center; margin-top:12px;
+    }
+    @media (max-width:520px){
+      #bingo-card, .detail-card{ --size:48px; }
+    }
+    .cell {
+      width:var(--size); height:var(--size); line-height:var(--size);
+      background:#fff; border:2px solid var(--pink); border-radius:10px;
+      font-size:18px; user-select:none; transition:transform .15s;
+    }
+    .cell.marked { background:var(--marked-bg); font-weight:bold; color:#e60073; }
+    .cell.win { animation: winBlink .9s ease-in-out infinite; box-shadow:0 0 0 2px #ff6b6b inset; }
+    @keyframes winBlink { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.3)} }
+    .cell.near { animation: nearPulse 1.2s ease-in-out infinite; }
+    @keyframes nearPulse { 0%{box-shadow:0 0 0 0 rgba(255,200,0,.6)} 70%{box-shadow:0 0 0 10px rgba(255,200,0,0)} 100%{box-shadow:0 0 0 0 rgba(255,200,0,0)} }
+
+    /* BINGO 列色分け（未マーク時のほのかな色）*/
+    .col-0:not(.marked){ background:var(--colB); }
+    .col-1:not(.marked){ background:var(--colI); }
+    .col-2:not(.marked){ background:var(--colN); }
+    .col-3:not(.marked){ background:var(--colG); }
+    .col-4:not(.marked){ background:var(--colO); }
+
+    button {
+      margin-top:14px; font-size:16px; padding:10px 18px;
+      background:var(--pink); border:none; border-radius:8px; color:#fff; cursor:pointer;
+    }
+    button:hover { background:var(--pink-2); }
     input { padding:8px; font-size:16px; border:1px solid #ccc; border-radius:6px; margin-right:8px; }
     #drawn-numbers, #name-area, #participants { margin-top:22px; font-size:16px; }
     #participants ul { list-style:none; padding:0; margin-top:10px; }
     #participants li { margin:6px 0; cursor:pointer; }
-
-    /* 詳細カード：5×5固定＋中央寄せ */
-    #detail-card { margin-top:12px; padding:10px; background:#fff8fb; border:2px dashed #e67cb8; border-radius:12px;
-      display:grid; grid-template-columns:repeat(5,56px); gap:6px; width:fit-content; margin-left:auto; margin-right:auto; }
-
+    #detail-card {
+      margin-top:12px; padding:10px; background:#fff8fb; border:2px dashed var(--pink-2);
+      border-radius:12px; display:grid; grid-template-columns:repeat(5,var(--size));
+      gap:6px; width:fit-content; margin-left:auto; margin-right:auto;
+    }
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; margin-left:6px; }
-    .badge.wait { background:#eee; } .badge.reach { background:#ffe082; } .badge.bingo { background:#c8e6c9; }
+    .badge.wait { background:#eee; }
+    .badge.reach { background:#ffe082; }
+    .badge.bingo { background:#c8e6c9; }
     .host-toggle { display:inline-flex; align-items:center; gap:8px; margin-left:10px; font-size:14px; }
     .last-num { font-weight:bold; font-size:18px; }
     .numbers-scroll { max-width:680px; margin:8px auto 0; overflow-x:auto; white-space:nowrap; }
+
+    /* ===== オーバーレイ（演出） ===== */
+    .hidden{ display:none !important; }
+    #overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.35);
+      display:flex; align-items:center; justify-content:center; z-index:9998;
+    }
+    .overlay-content {
+      background:rgba(255,255,255,.85);
+      padding:16px 24px; border-radius:16px; border:2px solid var(--pink-2);
+      box-shadow:0 20px 60px rgba(0,0,0,.25); text-align:center;
+    }
+    .glowText { font-size:44px; color:#e60073; text-shadow:0 0 14px #ffd1e6, 0 0 30px #ff7abc; }
+    /* 紙吹雪 */
+    .confetti { position:fixed; top:-20px; width:10px; height:14px; z-index:9999; opacity:.9;
+      animation: fall 3.2s linear forwards; border-radius:2px; }
+    @keyframes fall {
+      0%{ transform:translateY(-20px) rotate(0deg) }
+      100%{ transform:translateY(110vh) rotate(720deg); opacity:0 }
+    }
+    /* 花火／パーティクル（簡易） */
+    .burst{
+      position:fixed; width:8px; height:8px; border-radius:50%; background:#fff;
+      box-shadow:0 0 12px 4px rgba(255,255,255,.8);
+      animation:burst 900ms ease-out forwards; z-index:9999;
+    }
+    @keyframes burst{
+      from{ transform:scale(.3); opacity:.9 }
+      to{ transform:scale(2.7); opacity:0 }
+    }
+
+    /* ===== ガチャ演出 ===== */
+    #gacha { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9997;
+      display:flex; align-items:center; justify-content:center; }
+    .gacha-box{
+      background:#fff; border-radius:18px; border:3px solid var(--pink-2);
+      padding:16px 26px; box-shadow:0 18px 50px rgba(0,0,0,.3); text-align:center;
+    }
+    .slot{
+      font-size:56px; font-weight:800; letter-spacing:.06em; min-width:200px;
+      animation:spin 1.8s ease-out;
+    }
+    @keyframes spin{
+      0%{ transform:rotateX(0deg) }
+      85%{ transform:rotateX(720deg) }
+      100%{ transform:rotateX(720deg) }
+    }
+    .slot-pop{ animation:pop .35s ease-out; }
+    @keyframes pop{ 0%{transform:scale(.6)} 80%{transform:scale(1.15)} 100%{transform:scale(1)} }
   </style>
 </head>
 <body>
@@ -68,8 +159,12 @@
     <ul id="participant-list"></ul>
   </div>
 
+  <!-- ===== 演出用DOM ===== -->
+  <div id="overlay" class="hidden"><div class="overlay-content" id="overlay-content"></div></div>
+  <div id="gacha" class="hidden"><div class="gacha-box"><div id="slot" class="slot">??</div></div></div>
+
   <script>
-    // ============ Firebase ============
+    /************** Firebase 初期化 **************/
     const firebaseConfig = {
       apiKey:"AIzaSyDpiUUB8mB1eFBu2YejFVQlKtP1DF9cFKw",
       authDomain:"albion-0623.firebaseapp.com",
@@ -83,41 +178,52 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // ============ 定数（ローカル保存キー） ============
+    /************** ローカル保存キー **************/
     const LS_KEYS = {
       id:   "albion_bingo_myId",
       name: "albion_bingo_name",
-      card: "albion_bingo_card" // JSON.stringify([25個])
+      card: "albion_bingo_card"
     };
 
-    // ============ 変数 ============
+    /************** 変数 **************/
     const size = 5;
     let cardNumbers = [];
     let drawnNumbers = [];
     let myId = localStorage.getItem(LS_KEYS.id) || null;
     let openedDetailId = null;
 
-    const card = document.getElementById("bingo-card");
+    const cardEl = document.getElementById("bingo-card");
     const lastNumberEl = document.getElementById("last-number");
     const numbersListEl = document.getElementById("numbers-list");
     const nameInput = document.getElementById("player-name");
     const participantList = document.getElementById("participant-list");
     const hostMode = document.getElementById("host-mode");
 
-    // ============ Discord（任意） ============
-    const DISCORD_WEBHOOK_URL = ""; // 非推奨
-    const DISCORD_PROXY_URL = "";   // 推奨：中継関数
-    async function postDiscordDirect(payload){ if(!DISCORD_WEBHOOK_URL) return; try{ await fetch(DISCORD_WEBHOOK_URL,{method:"POST",headers:{ "Content-Type":"application/json"},body:JSON.stringify(payload)});}catch(e){console.warn("Discord送信失敗",e);} }
-    async function postDiscordProxy(payload){ if(!DISCORD_PROXY_URL) return; try{ await fetch(DISCORD_PROXY_URL,{method:"POST",headers:{ "Content-Type":"application/json"},body:JSON.stringify(payload)});}catch(e){console.warn("Discord送信失敗",e);} }
-    async function notifyDiscord(type,data){
-      const content = type==="reach"
-        ? `🎯 **${data.name}** さんが **リーチ**！（番号: ${data.lastNumber}）`
-        : `🎉 **${data.name}** さんが **BINGO!**（番号: ${data.lastNumber} / **${data.rank}位**）`;
-      const payload = { content };
-      await postDiscordProxy(payload); await postDiscordDirect(payload);
+    /************** Web Audio（効果音を合成） **************/
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function beep({freq=880, dur=0.15, type="sine", gain=0.06}={}){
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start();
+      setTimeout(()=>{ o.stop(); }, dur*1000);
+    }
+    function reachSound(){
+      beep({freq:1200,dur:.08,type:"triangle"});
+      setTimeout(()=>beep({freq:1600,dur:.09,type:"triangle"}),90);
+    }
+    function bingoSound(){
+      [0,120,240,360].forEach((t,i)=>setTimeout(()=>beep({freq:700+i*120,dur:.11,type:"square",gain:.08}),t));
+      setTimeout(()=>beep({freq:1300,dur:.25,type:"sawtooth",gain:.09}),420);
+    }
+    function gachaSound(){
+      for(let i=0;i<7;i++) setTimeout(()=>beep({freq:500+i*40,dur:.07,type:"square",gain:.04}), i*90);
+      setTimeout(()=>beep({freq:900,dur:.22,type:"triangle",gain:.06}), 7*90+60);
     }
 
-    // ============ カード生成/表示 ============
+    /************** 見た目（カード描画） **************/
     function generateCard(){
       const used = new Set();
       cardNumbers = [];
@@ -128,40 +234,81 @@
       cardNumbers[Math.floor(size*size/2)]="FREE";
     }
     function displayCard(){
-      card.innerHTML="";
-      cardNumbers.forEach(n=>{
-        const cell=document.createElement("div");
-        cell.className="cell"; cell.textContent=n;
+      cardEl.innerHTML = "";
+      for(let i=0;i<cardNumbers.length;i++){
+        const n = cardNumbers[i];
+        const col = i % 5;
+        const cell = document.createElement("div");
+        cell.className = `cell col-${col}`;
+        cell.textContent = n;
         if(n==="FREE") cell.classList.add("marked");
-        card.appendChild(cell);
-      });
-      markCardWithDrawn();
+        cardEl.appendChild(cell);
+      }
+      markCardWithDrawn(); // 既出番号反映＆ライン強調
     }
 
-    // ============ 抽選 ============
+    /************** 番号抽選（ガチャ演出込み） **************/
     function drawNumber(){
       if(!hostMode.checked) return alert("主催者モードがONの人のみ抽選できます。");
       if(drawnNumbers.length>=75) return;
-      let num; do{ num=Math.floor(Math.random()*75)+1; } while(drawnNumbers.includes(num));
-      drawnNumbers.push(num);
-      db.ref("drawnNumbers").set(drawnNumbers);
+
+      let num;
+      do{ num = Math.floor(Math.random()*75)+1; } while(drawnNumbers.includes(num));
+
+      // 先にDBへ書いてリアルタイム同期
+      const next = [...drawnNumbers, num];
+      db.ref("drawnNumbers").set(next);
+
+      // ガチャ演出
+      showGacha(num);
     }
 
-    // ============ UI反映 ============
+    /************** UI反映＋ライン強調 **************/
     function updateDrawnNumbersUI(){
       const last = drawnNumbers[drawnNumbers.length-1];
       lastNumberEl.textContent = last ?? "–";
       numbersListEl.textContent = drawnNumbers.length ? drawnNumbers.join("・") : "（まだありません）";
       markCardWithDrawn();
     }
+
     function markCardWithDrawn(){
-      document.querySelectorAll("#bingo-card .cell").forEach(c=>{
-        const val=c.textContent; const n=(val==="FREE")?"FREE":Number(val);
-        if(n==="FREE" || drawnNumbers.includes(n)) c.classList.add("marked"); else c.classList.remove("marked");
+      const cells = [...cardEl.querySelectorAll(".cell")];
+      // まず全ての状態をクリア
+      cells.forEach(c=>c.classList.remove("marked","win","near"));
+
+      // マーク
+      cells.forEach((c,idx)=>{
+        const val = c.textContent;
+        const n = val==="FREE" ? "FREE" : Number(val);
+        if(n==="FREE" || drawnNumbers.includes(n)) c.classList.add("marked");
       });
+
+      // 自分カードのライン強調（リーチ/ビンゴ）
+      const {winningLines, nearLines} = getLineStatus(cardNumbers, drawnNumbers);
+      winningLines.forEach(lineIdxs => lineIdxs.forEach(i => cells[i].classList.add("win")));
+      nearLines.forEach(lineIdxs => lineIdxs.forEach(i => cells[i].classList.add("near")));
     }
 
-    // ============ 判定 ============
+    function getLineStatus(cardVals, drawn){
+      const lines = [];
+      // rows
+      for(let r=0;r<5;r++) lines.push([0,1,2,3,4].map(c=>r*5+c));
+      // cols
+      for(let c=0;c<5;c++) lines.push([0,1,2,3,4].map(r=>r*5+c));
+      // diagonals
+      lines.push([0,6,12,18,24], [4,8,12,16,20]);
+
+      const winningLines=[], nearLines=[];
+      for(const idxs of lines){
+        const values = idxs.map(i=>cardVals[i]);
+        const marks = values.filter(v => v==="FREE" || drawn.includes(Number(v))).length;
+        if(marks===5) winningLines.push(idxs);
+        else if(marks===4) nearLines.push(idxs);
+      }
+      return {winningLines, nearLines};
+    }
+
+    /************** 判定ロジック（他参加者にも使う） **************/
     function isMarkedValue(val, drawn){ if(val==="FREE") return true; return drawn.includes(Number(val)); }
     function countLineMarks(line, drawn){ return line.reduce((a,v)=>a+(isMarkedValue(v,drawn)?1:0),0); }
     function computeStatus(cardVals, drawn){
@@ -170,13 +317,16 @@
       for(let c=0;c<5;c++) lines.push([0,1,2,3,4].map(r=>cardVals[r*5+c]));
       lines.push([0,6,12,18,24].map(i=>cardVals[i]), [4,8,12,16,20].map(i=>cardVals[i]));
       let hasBingo=false, hasReach=false;
-      for(const L of lines){ const m=countLineMarks(L,drawn); if(m===5) hasBingo=true; else if(m===4) hasReach=true; }
-      return hasBingo?"ビンゴ":(hasReach?"リーチ":"参加中");
+      for(const L of lines){
+        const m = countLineMarks(L, drawn);
+        if(m===5) hasBingo=true; else if(m===4) hasReach=true;
+      }
+      return hasBingo ? "ビンゴ" : (hasReach ? "リーチ" : "参加中");
     }
 
-    // ============ 参加登録 ============
-    function saveLocalSelf(){
-      if(myId) localStorage.setItem(LS_KEYS.id,myId);
+    /************** 参加登録＆復旧 **************/
+    function saveLocal(){
+      if(myId) localStorage.setItem(LS_KEYS.id, myId);
       const nm = nameInput.value.trim() || localStorage.getItem(LS_KEYS.name) || "";
       if(nm) localStorage.setItem(LS_KEYS.name, nm);
       localStorage.setItem(LS_KEYS.card, JSON.stringify(cardNumbers));
@@ -186,12 +336,10 @@
       if(!name) return alert("名前を入力してください！");
       if(!myId) myId = db.ref("participants").push().key;
       db.ref("participants/"+myId).set({ name, status:"参加中", card: cardNumbers });
-      saveLocalSelf();
+      saveLocal();
       alert("参加登録しました！");
     }
-
-    // ============ 自動復旧 ============
-    async function tryRestoreFromLocal(){
+    async function tryRestore(){
       const storedId   = localStorage.getItem(LS_KEYS.id);
       const storedName = localStorage.getItem(LS_KEYS.name);
       const storedCard = localStorage.getItem(LS_KEYS.card);
@@ -201,25 +349,19 @@
         myId = storedId;
         const snap = await db.ref("participants/"+storedId).once("value");
         const p = snap.val();
-        if(p && Array.isArray(p.card)){
-          cardNumbers = p.card;
-          displayCard();
-          return true;
-        }
-        // 参加者ノードが消えていてもローカルにカードがあれば再登録
+        if(p && Array.isArray(p.card)){ cardNumbers = p.card; displayCard(); return true; }
         if(storedCard){
           try{
             const card = JSON.parse(storedCard);
             if(Array.isArray(card) && card.length===25){
               cardNumbers = card; displayCard();
-              const name = storedName || "Player";
-              await db.ref("participants/"+storedId).set({ name, status:"参加中", card: cardNumbers });
+              const nm = storedName || "Player";
+              await db.ref("participants/"+storedId).set({ name:nm, status:"参加中", card:cardNumbers });
               return true;
             }
           }catch(_){}
         }
-      } else if(storedCard){
-        // myIdが無いがカードはある → それを使って表示だけしておく（参加ボタンで登録）
+      }else if(storedCard){
         try{
           const card = JSON.parse(storedCard);
           if(Array.isArray(card) && card.length===25){ cardNumbers=card; displayCard(); return true; }
@@ -228,22 +370,22 @@
       return false;
     }
 
-    // ============ 詳細モード ============
+    /************** 詳細モード（一枚のみ） **************/
     function showDetailCard(player,id){
       const existing=document.getElementById("detail-card");
       if(openedDetailId===id){ if(existing) existing.remove(); openedDetailId=null; return; }
       if(existing) existing.remove();
       const detail=document.createElement("div");
       detail.id="detail-card"; detail.className="detail-card";
-      player.card.forEach(n=>{
-        const c=document.createElement("div"); c.className="cell"; c.textContent=n;
+      player.card.forEach((n,idx)=>{
+        const c=document.createElement("div"); c.className=`cell col-${idx%5}`; c.textContent=n;
         if(n==="FREE"||drawnNumbers.includes(Number(n))) c.classList.add("marked");
         detail.appendChild(c);
       });
       participantList.appendChild(detail); openedDetailId=id;
     }
 
-    // ============ ビンゴ順位（rankCounter）＆ログ ============
+    /************** ビンゴ順位（rankCounter）＆ログ＋演出発火 **************/
     async function assignBingoRank(){
       const ref = db.ref("rankCounter");
       const newRank = await ref.transaction(v=>(v||0)+1).then(r=>r.snapshot.val()).catch(()=>null);
@@ -251,36 +393,42 @@
     }
     async function onParticipantMaybeUpdateStatus(id,p,drawn){
       const lastNumber = drawn[drawn.length-1] || null;
-      const newStatus = computeStatus(p.card,drawn);
-      if(newStatus===p.status) return;
+      const newStatus = computeStatus(p.card, drawn);
+      if(newStatus === p.status) return;
+
       await db.ref(`participants/${id}/status`).set(newStatus);
+
       if(newStatus==="リーチ"){
+        if(id===myId){ showReach(); } // 自分だけ派手に
         notifyDiscord("reach",{name:p.name,lastNumber});
       }else if(newStatus==="ビンゴ"){
         const rank = await assignBingoRank();
         const log = { name:p.name, lastNumber, rank:rank||null, ts:Date.now() };
         await db.ref("bingoLogs/items").push(log);
+        if(id===myId){ showBingo(rank); }
         notifyDiscord("bingo",{name:p.name,lastNumber,rank});
       }
     }
 
-    // ============ 監視 ============
+    /************** 参加者監視 **************/
     db.ref("participants").on("value",snap=>{
       const data=snap.val()||{};
       participantList.innerHTML="";
       Object.entries(data).forEach(([id,p])=>{
         const li=document.createElement("li");
         const badgeClass = p.status==="ビンゴ"?"bingo":(p.status==="リーチ"?"reach":"wait");
-        li.innerHTML=`<strong>${p.name}</strong><span class="badge ${badgeClass}">${p.status}</span>`;
-        li.onclick=()=>showDetailCard(p,id);
+        li.innerHTML = `<strong>${p.name}</strong><span class="badge ${badgeClass}">${p.status}</span>`;
+        li.onclick = ()=>showDetailCard(p,id);
         participantList.appendChild(li);
         if(drawnNumbers.length && p.card) onParticipantMaybeUpdateStatus(id,p,drawnNumbers);
       });
     });
 
+    /************** 抽選番号の同期 **************/
     db.ref("drawnNumbers").on("value",snap=>{
       drawnNumbers = snap.val()||[];
       updateDrawnNumbersUI();
+      // 抽選更新ごとに全員再評価
       db.ref("participants").once("value").then(s=>{
         const participants=s.val()||{};
         Object.entries(participants).forEach(([id,p])=>{
@@ -289,7 +437,22 @@
       });
     });
 
-    // ============ リセット ============
+    /************** Discord 通知（任意・ダミー） **************/
+    const DISCORD_WEBHOOK_URL = ""; // 直貼りは非推奨
+    const DISCORD_PROXY_URL = "";   // 中継関数推奨
+    async function postDiscordDirect(payload){ if(!DISCORD_WEBHOOK_URL) return; try{ await fetch(DISCORD_WEBHOOK_URL,{method:"POST",headers:{ "Content-Type":"application/json"},body:JSON.stringify(payload)});}catch(e){ console.warn("Discord送信失敗",e); } }
+    async function postDiscordProxy(payload){ if(!DISCORD_PROXY_URL) return; try{ await fetch(DISCORD_PROXY_URL,{method:"POST",headers:{ "Content-Type":"application/json"},body:JSON.stringify(payload)});}catch(e){ console.warn("Discord送信失敗",e); } }
+    async function notifyDiscord(type, data){
+      // Annaさん口調サンプル
+      const content =
+        type==="reach"
+          ? `🎯 ${data.name} さん、リーチになったよ？（番号: ${data.lastNumber}）`
+          : `🎉 ${data.name} さん、ビンゴすんね？ ただいま **${data.rank}位** だよ！`;
+      const payload = { content };
+      await postDiscordProxy(payload); await postDiscordDirect(payload);
+    }
+
+    /************** リセット **************/
     function resetGame(){
       if(!confirm("ゲームをリセットしますか？（抽選履歴・参加者情報・順位ログ・rankCounter・端末内の保存を初期化）")) return;
       db.ref("drawnNumbers").set([]);
@@ -298,20 +461,72 @@
       db.ref("rankCounter").set(0);
       drawnNumbers=[]; updateDrawnNumbersUI();
       const existing=document.getElementById("detail-card"); if(existing) existing.remove(); openedDetailId=null;
-      // 端末側もクリア
-      localStorage.removeItem(LS_KEYS.id);
-      localStorage.removeItem(LS_KEYS.name);
-      localStorage.removeItem(LS_KEYS.card);
+      localStorage.removeItem(LS_KEYS.id); localStorage.removeItem(LS_KEYS.name); localStorage.removeItem(LS_KEYS.card);
       myId=null; generateCard(); displayCard();
     }
 
-    // ============ 初期化 ============
+    /************** 演出：オーバーレイ／ガチャ **************/
+    function showReach(){
+      reachSound();
+      const o = document.getElementById("overlay");
+      const c = document.getElementById("overlay-content");
+      c.innerHTML = `<div class="glowText">🎯 リーチ！</div>`;
+      o.classList.remove("hidden");
+      // 軽いパーティクル
+      spawnBursts(8);
+      setTimeout(()=>o.classList.add("hidden"), 1600);
+    }
+    function showBingo(rank){
+      bingoSound();
+      const o = document.getElementById("overlay");
+      const c = document.getElementById("overlay-content");
+      c.innerHTML = `<div class="glowText">🎉 BINGO!! ${rank?`<br><small>${rank}位！</small>`:""}</div>`;
+      o.classList.remove("hidden");
+      // 紙吹雪＆花火
+      dropConfetti(80);
+      spawnBursts(16);
+      setTimeout(()=>o.classList.add("hidden"), 3200);
+    }
+    function showGacha(number){
+      gachaSound();
+      const g = document.getElementById("gacha");
+      const s = document.getElementById("slot");
+      g.classList.remove("hidden"); s.classList.remove("slot-pop"); s.textContent="??";
+      s.style.animation="none"; s.offsetHeight; // reflow
+      s.style.animation=null; // spin 再適用
+      setTimeout(()=>{ s.textContent = number; s.classList.add("slot-pop"); }, 1800);
+      setTimeout(()=>g.classList.add("hidden"), 3600);
+    }
+    function dropConfetti(n=60){
+      const colors=["#ff6b6b","#ffd93d","#6bcB77","#4d96ff","#b26bff","#ff8fab"];
+      for(let i=0;i<n;i++){
+        const d=document.createElement("div"); d.className="confetti";
+        d.style.left = (Math.random()*100)+"vw";
+        d.style.background = colors[(Math.random()*colors.length)|0];
+        d.style.animationDuration = (2.6+Math.random()*1.2)+"s";
+        d.style.transform = `rotate(${Math.random()*180}deg)`;
+        document.body.appendChild(d);
+        setTimeout(()=>d.remove(), 4200);
+      }
+    }
+    function spawnBursts(n=12){
+      for(let i=0;i<n;i++){
+        setTimeout(()=>{
+          const b=document.createElement("div"); b.className="burst";
+          b.style.left = (10+Math.random()*80)+"vw";
+          b.style.top  = (20+Math.random()*60)+"vh";
+          document.body.appendChild(b);
+          setTimeout(()=>b.remove(), 1000);
+        }, i*50);
+      }
+    }
+
+    /************** 初期化 **************/
     (async function init(){
-      const restored = await tryRestoreFromLocal();
+      const restored = await tryRestore();
       if(!restored){ generateCard(); displayCard(); }
-      // フォームの名前欄プレフィル
       const nm = localStorage.getItem(LS_KEYS.name); if(nm) nameInput.value = nm;
-      // 参加/カード状態を常にローカルにも保持（保険）
+      // 定期バックアップ
       setInterval(()=>{ if(cardNumbers?.length===25){ localStorage.setItem(LS_KEYS.card, JSON.stringify(cardNumbers)); } }, 3000);
     })();
   </script>
