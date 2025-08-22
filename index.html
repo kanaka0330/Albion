@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>🎀 あるびおんビンゴ（豪華演出＋スキップ） 🎀</title>
 
   <!-- Firebase SDK -->
@@ -18,7 +18,6 @@
       --colO:#ead7ff; /* O列 */
       --pink:#f8a4c3;
       --pink-2:#e67cb8;
-      --marked-bg:#fbd0e2;
       --accent:#e60073;
     }
     body {
@@ -43,13 +42,14 @@
       background:#fff; border:2px solid var(--pink); border-radius:10px;
       font-size:18px; user-select:none; transition:transform .15s;
     }
-    .cell.marked { background:var(--marked-bg); font-weight:700; color:var(--accent); }
+    /* ★ 当たったマス = 背景白 + 文字ピンク（FREEと同様） */
+    .cell.marked { background:#fff; font-weight:700; color:var(--accent); }
     /* FREEは常に白でB列と混同しない */
     .cell.free { background:#fff !important; color:var(--accent); }
 
     /* ライン演出 */
     .cell.win { animation: winBlink .9s ease-in-out infinite; box-shadow:0 0 0 2px #ff6b6b inset; }
-    @keyframes winBlink { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.3)} }
+    @keyframes winBlink { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.25)} }
     .cell.near { animation: nearPulse 1.2s ease-in-out infinite; }
     @keyframes nearPulse { 0%{box-shadow:0 0 0 0 rgba(255,200,0,.6)} 70%{box-shadow:0 0 0 10px rgba(255,200,0,0)} 100%{box-shadow:0 0 0 0 rgba(255,200,0,0)} }
 
@@ -80,11 +80,11 @@
     .last-num { font-weight:bold; font-size:18px; }
     .numbers-scroll { max-width:680px; margin:8px auto 0; overflow-x:auto; white-space:nowrap; }
 
-    /* ===== 演出オーバーレイ ===== */
+    /* ===== 演出オーバーレイ（豪華＆スキップ対応） ===== */
     .hidden{ display:none !important; }
     #gOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9997; }
     #gOverlay.show { display:flex; }
-    #gBackdrop { position:absolute; inset:0; background:rgba(0,0,0,.45); }
+    #gBackdrop { position:absolute; inset:0; background:rgba(0,0,0,.45); cursor:pointer; }
 
     /* 画面フラッシュ */
     .flash{ position:absolute; inset:0; background:#fff; opacity:0; animation:flash 600ms ease-out forwards; pointer-events:none; }
@@ -186,7 +186,7 @@
 
   <!-- ===== 演出用DOM（豪華ガチャ＋スキップ可） ===== -->
   <div id="gOverlay">
-    <div id="gBackdrop"></div>
+    <div id="gBackdrop" title="クリックでスキップ"></div>
     <div id="gFlash" class="flash" style="display:none"></div>
     <div class="rays"></div>
     <div class="gachaBox" id="gBox">
@@ -285,10 +285,18 @@
     function closeGacha(){
       gOverlay.classList.remove("show");
       gachaActive = false;
-      // 残タイマーをクリア
       [tReveal, tFire, tClose].forEach(t=>{ if(t){ clearTimeout(t); } });
       tReveal=tFire=tClose=null;
     }
+    function skipGacha(){
+      if(!gachaActive) return;
+      slot.textContent = currentGachaNumber ?? slot.textContent;
+      gGlitter.style.display='flex'; gFlash.style.display='block';
+      closeGacha();
+      if (fastSkip.checked && hostMode.checked) setTimeout(()=>{ if(hostMode.checked) drawNumber(); }, 60);
+    }
+    gBackdrop.addEventListener("click", skipGacha);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") skipGacha(); });
 
     function showGacha(number){
       gachaActive = true;
@@ -315,23 +323,6 @@
       // 余韻→クローズ
       tClose = setTimeout(()=>{ closeGacha(); }, 2800);
     }
-
-    // スキップ（背景クリックやESCで呼ぶ）
-    function skipGacha(){
-      if(!gachaActive) return;
-      // 即時数字を表示して閉じる
-      slot.textContent = currentGachaNumber ?? slot.textContent;
-      gGlitter.style.display='flex'; gFlash.style.display='block';
-      closeGacha();
-
-      // 急ぎモードなら自動で次の抽選
-      if (fastSkip.checked && hostMode.checked) {
-        // 小さな遅延で連打事故防止
-        setTimeout(()=>{ if(hostMode.checked) drawNumber(); }, 60);
-      }
-    }
-    gBackdrop.addEventListener("click", skipGacha);
-    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") skipGacha(); });
 
     /************** 抽選（DB更新→演出） **************/
     async function drawNumber(){
@@ -374,7 +365,7 @@
       cells.forEach((c,idx)=>{
         const val = c.textContent; const n = val==="FREE"?"FREE":Number(val);
         if(n==="FREE") c.classList.add("marked","free");
-        if(n==="FREE"||drawnNumbers.includes(n)) c.classList.add("marked");
+        if(n==="FREE"||drawnNumbers.includes(n)) c.classList.add("marked"); // ← 当たり＝白背景＆ピンク文字
       });
       const {winningLines, nearLines} = getLineStatus(cardNumbers, drawnNumbers);
       winningLines.forEach(line=>line.forEach(i=>cells[i].classList.add("win")));
